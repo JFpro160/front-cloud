@@ -86,7 +86,7 @@ function HomeContent({ userName }: { userName: string | null }) {
                         source={require('@/assets/images/partial-react-logo.png')}
                         style={styles.headerImage}
                     />
-                    <Text style={styles.headerTitle}>Welcome to MyApp</Text>
+                    <Text style={styles.headerTitle}>Welcome to BE+!</Text>
                     <Text style={styles.headerSubtitle}>
                         Your companion for learning and growth.
                     </Text>

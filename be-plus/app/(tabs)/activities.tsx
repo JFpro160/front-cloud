@@ -3,29 +3,39 @@ import {
     View,
     Text,
     FlatList,
-    Button,
     TextInput,
     TouchableOpacity,
     StyleSheet,
     Alert,
     ActivityIndicator,
+    Modal,
+    ScrollView,
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import axios from "axios";
+
+interface Activity {
+    activity_id: string;
+    activity_type: string;
+    activity_data: { [key: string]: any };
+}
 
 export default function ActivitiesScreen() {
-    const [activities, setActivities] = useState([]);
+    const [activities, setActivities] = useState<Activity[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [newActivity, setNewActivity] = useState("");
+    const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+    const [modalVisible, setModalVisible] = useState(false);
 
-    // Log API Requests and Responses
-    const logApiCall = (method: string, endpoint: string, payload: object | null, response: Response, responseBody: any) => {
-        console.log(`API Request:
-        Method: ${method}
-        Endpoint: ${endpoint}
-        Payload: ${JSON.stringify(payload)}
-        Status: ${response.status}
-        Response: ${JSON.stringify(responseBody)}`);
+    const getAuthToken = async (): Promise<string | null> => {
+        try {
+            return await SecureStore.getItemAsync("authToken");
+        } catch (err) {
+            console.error("Error retrieving token:", err);
+            setError("Failed to retrieve authentication token.");
+            return null;
+        }
     };
 
     const fetchActivities = async () => {
@@ -33,31 +43,25 @@ export default function ActivitiesScreen() {
         const endpoint = "https://m423uvy6wj.execute-api.us-east-1.amazonaws.com/dev/activities?method=gsi&limit=10";
 
         try {
-            const token = await SecureStore.getItemAsync("authToken");
+            const token = await getAuthToken();
             if (!token) {
                 setError("Authentication token not found.");
-                setIsLoading(false);
                 return;
             }
 
-            const response = await fetch(endpoint, {
-                method: "GET",
+            const response = await axios.get(endpoint, {
                 headers: { Authorization: token },
             });
 
-            const data = await response.json();
-
-            logApiCall("GET", endpoint, null, response, data);
-
-            if (response.ok) {
-                setActivities(data.body.items || []);
+            if (response.data.body?.items) {
+                setActivities(response.data.body.items);
                 setError(null);
             } else {
-                setError(`Failed to fetch activities: ${data.message || "Unknown error"}`);
+                setError("Failed to fetch activities.");
             }
         } catch (err) {
             console.error("Error fetching activities:", err);
-            setError("An unexpected error occurred while fetching activities.");
+            setError("An error occurred while fetching activities.");
         } finally {
             setIsLoading(false);
         }
@@ -72,39 +76,33 @@ export default function ActivitiesScreen() {
         const endpoint = "https://m423uvy6wj.execute-api.us-east-1.amazonaws.com/dev/activities";
         const payload = {
             activity_type: newActivity,
-            activity_data: { time: 30 }, // Example data
+            activity_data: { time: 30 },
         };
 
         try {
-            const token = await SecureStore.getItemAsync("authToken");
+            const token = await getAuthToken();
             if (!token) {
                 setError("Authentication token not found.");
                 return;
             }
 
-            const response = await fetch(endpoint, {
-                method: "POST",
+            const response = await axios.post(endpoint, payload, {
                 headers: {
                     Authorization: token,
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(payload),
             });
 
-            const data = await response.json();
-
-            logApiCall("POST", endpoint, payload, response, data);
-
-            if (response.ok) {
+            if (response.data) {
                 Alert.alert("Success", "Activity added successfully!");
                 setNewActivity("");
-                fetchActivities(); // Refresh the activities list
+                fetchActivities();
             } else {
-                setError(`Failed to add activity: ${data.message || "Unknown error"}`);
+                setError("Failed to add activity.");
             }
         } catch (err) {
             console.error("Error adding activity:", err);
-            setError("An unexpected error occurred while adding the activity.");
+            setError("An error occurred while adding the activity.");
         }
     };
 
@@ -113,35 +111,35 @@ export default function ActivitiesScreen() {
         const payload = { activity_id: activityId };
 
         try {
-            const token = await SecureStore.getItemAsync("authToken");
+            const token = await getAuthToken();
             if (!token) {
                 setError("Authentication token not found.");
                 return;
             }
 
-            const response = await fetch(endpoint, {
-                method: "DELETE",
+            const response = await axios.delete(endpoint, {
                 headers: {
                     Authorization: token,
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(payload),
+                data: payload,
             });
 
-            const data = await response.json();
-
-            logApiCall("DELETE", endpoint, payload, response, data);
-
-            if (response.ok) {
+            if (response.data) {
                 Alert.alert("Success", "Activity deleted successfully!");
-                fetchActivities(); // Refresh the activities list
+                fetchActivities();
             } else {
-                setError(`Failed to delete activity: ${data.message || "Unknown error"}`);
+                setError("Failed to delete activity.");
             }
         } catch (err) {
             console.error("Error deleting activity:", err);
-            setError("An unexpected error occurred while deleting the activity.");
+            setError("An error occurred while deleting the activity.");
         }
+    };
+
+    const showActivityDetails = (activity: Activity) => {
+        setSelectedActivity(activity);
+        setModalVisible(true);
     };
 
     useEffect(() => {
@@ -161,14 +159,22 @@ export default function ActivitiesScreen() {
                     data={activities}
                     keyExtractor={(item) => item.activity_id}
                     renderItem={({ item }) => (
-                        <View style={styles.activityItem}>
+                        <View style={styles.activityCard}>
                             <Text style={styles.activityText}>{item.activity_type}</Text>
-                            <TouchableOpacity
-                                style={styles.deleteButton}
-                                onPress={() => deleteActivity(item.activity_id)}
-                            >
-                                <Text style={styles.deleteButtonText}>Delete</Text>
-                            </TouchableOpacity>
+                            <View style={styles.activityButtons}>
+                                <TouchableOpacity
+                                    style={styles.detailsButton}
+                                    onPress={() => showActivityDetails(item)}
+                                >
+                                    <Text style={styles.detailsButtonText}>Details</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.deleteButton}
+                                    onPress={() => deleteActivity(item.activity_id)}
+                                >
+                                    <Text style={styles.deleteButtonText}>Delete</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     )}
                 />
@@ -181,8 +187,46 @@ export default function ActivitiesScreen() {
                     value={newActivity}
                     onChangeText={setNewActivity}
                 />
-                <Button title="Add Activity" onPress={addActivity} />
+                <TouchableOpacity style={styles.addButton} onPress={addActivity}>
+                    <Text style={styles.addButtonText}>Add</Text>
+                </TouchableOpacity>
             </View>
+
+            {selectedActivity && (
+                <Modal visible={modalVisible} transparent={true}>
+                    <View style={styles.modalContainer}>
+                        <ScrollView contentContainerStyle={styles.modalContent}>
+                            <Text style={styles.modalTitle}>Activity Details</Text>
+                            <View style={styles.detailsContainer}>
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Type:</Text>
+                                    <Text style={styles.detailValue}>
+                                        {selectedActivity.activity_type}
+                                    </Text>
+                                </View>
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Data:</Text>
+                                    <View style={styles.detailValueBox}>
+                                        {Object.entries(selectedActivity.activity_data).map(
+                                            ([key, value]) => (
+                                                <Text key={key} style={styles.detailDataRow}>
+                                                    {`${key}: ${value}`}
+                                                </Text>
+                                            )
+                                        )}
+                                    </View>
+                                </View>
+                            </View>
+                            <TouchableOpacity
+                                style={styles.closeButton}
+                                onPress={() => setModalVisible(false)}
+                            >
+                                <Text style={styles.closeButtonText}>Close</Text>
+                            </TouchableOpacity>
+                        </ScrollView>
+                    </View>
+                </Modal>
+            )}
         </View>
     );
 }
@@ -203,19 +247,34 @@ const styles = StyleSheet.create({
         color: "red",
         marginBottom: 16,
     },
-    activityItem: {
+    activityCard: {
+        backgroundColor: "#FFF",
+        padding: 16,
+        marginVertical: 8,
+        borderRadius: 8,
+        elevation: 3,
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        padding: 10,
-        marginVertical: 8,
-        borderRadius: 5,
-        backgroundColor: "#FFFFFF",
-        elevation: 2,
     },
     activityText: {
         fontSize: 16,
+        flex: 1,
         color: "#333",
+    },
+    activityButtons: {
+        flexDirection: "row",
+    },
+    detailsButton: {
+        backgroundColor: "#4CAF50",
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 4,
+        marginRight: 8,
+    },
+    detailsButtonText: {
+        color: "#FFF",
+        fontSize: 14,
     },
     deleteButton: {
         backgroundColor: "#FF4D4D",
@@ -229,8 +288,6 @@ const styles = StyleSheet.create({
     },
     inputContainer: {
         flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
         marginTop: 16,
     },
     input: {
@@ -241,5 +298,73 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
         marginRight: 8,
     },
+    addButton: {
+        backgroundColor: "#40B3A2",
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 5,
+    },
+    addButtonText: {
+        color: "#FFF",
+        fontWeight: "bold",
+    },
+    modalContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "rgba(0,0,0,0.8)",
+    },
+    modalContent: {
+        backgroundColor: "#FFF",
+        padding: 20,
+        borderRadius: 8,
+        alignItems: "center",
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: "bold",
+        marginBottom: 10,
+        color: "#2A4955",
+    },
+    closeButton: {
+        backgroundColor: "#2196F3",
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 5,
+    },
+    closeButtonText: {
+        color: "#FFF",
+        fontWeight: "bold",
+    },
+    detailsContainer: {
+        marginVertical: 20,
+    },
+    detailRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        marginBottom: 10,
+    },
+    detailLabel: {
+        fontWeight: "bold",
+        fontSize: 16,
+        color: "#2A4955",
+    },
+    detailValue: {
+        fontSize: 16,
+        color: "#333",
+        textAlign: "right",
+    },
+    detailValueBox: {
+        backgroundColor: "#F5F5F5",
+        padding: 10,
+        borderRadius: 8,
+        marginTop: 8,
+    },
+    detailDataRow: {
+        fontSize: 14,
+        color: "#666",
+    },
 });
+
+
 
