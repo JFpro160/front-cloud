@@ -1,12 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Image, TextInput, TouchableOpacity, ScrollView, Alert, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
-import { LinearGradient } from 'expo-linear-gradient';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState, useEffect } from "react";
+import {
+    View,
+    Text,
+    Image,
+    TextInput,
+    TouchableOpacity,
+    ScrollView,
+    Alert,
+    StyleSheet,
+    ActivityIndicator,
+} from "react-native";
+import { useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
+import { LinearGradient } from "expo-linear-gradient";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { Ionicons } from "@expo/vector-icons";
 
-// Define the structure of our student data
 interface StudentData {
     student_name?: string;
     student_email?: string;
@@ -26,6 +35,7 @@ export default function ProfileScreen() {
     const [studentData, setStudentData] = useState<StudentData | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         fetchStudentData();
@@ -33,15 +43,14 @@ export default function ProfileScreen() {
 
     const fetchStudentData = async () => {
         try {
-            const token = await SecureStore.getItemAsync('authToken');
+            const token = await SecureStore.getItemAsync("authToken");
             if (!token) {
-                console.error('No authentication token found');
-                Alert.alert('Error', 'No authentication token found');
+                setError("Authentication token not found.");
                 return;
             }
 
-            const response = await fetch('https://6mgme2hqqi.execute-api.us-east-1.amazonaws.com/dev/students', {
-                method: 'GET',
+            const response = await fetch("https://6mgme2hqqi.execute-api.us-east-1.amazonaws.com/dev/students", {
+                method: "GET",
                 headers: {
                     Authorization: token,
                 },
@@ -53,31 +62,30 @@ export default function ProfileScreen() {
                 setStudentData({
                     ...data.body,
                     ...data.body.student_data,
-                    image_url: data.body.image_url || '/placeholder.svg?height=120&width=120',
+                    image_url: data.body.image_url || null,
                 });
             } else {
-                Alert.alert('Error', `Failed to fetch student data: ${data.message || 'Unknown error'}`);
+                setError(`Failed to fetch student data: ${data.message || "Unknown error"}`);
             }
-        } catch (error) {
-            console.error('Error fetching student data:', error);
-            Alert.alert('Error', 'An unexpected error occurred while fetching student data.');
+        } catch (err) {
+            console.error("Error fetching student data:", err);
+            setError("An unexpected error occurred while fetching student data.");
         }
     };
 
     const updateStudentData = async () => {
         try {
-            const token = await SecureStore.getItemAsync('authToken');
+            const token = await SecureStore.getItemAsync("authToken");
             if (!token) {
-                console.error('No authentication token found');
-                Alert.alert('Error', 'No authentication token found');
+                setError("Authentication token not found.");
                 return;
             }
 
-            const response = await fetch('https://6mgme2hqqi.execute-api.us-east-1.amazonaws.com/dev/students', {
-                method: 'PUT',
+            const response = await fetch("https://6mgme2hqqi.execute-api.us-east-1.amazonaws.com/dev/students", {
+                method: "PUT",
                 headers: {
                     Authorization: token,
-                    'Content-Type': 'application/json',
+                    "Content-Type": "application/json",
                 },
                 body: JSON.stringify(studentData),
             });
@@ -85,109 +93,78 @@ export default function ProfileScreen() {
             const data = await response.json();
 
             if (response.ok) {
-                Alert.alert('Success', 'Profile updated successfully');
+                Alert.alert("Success", "Profile updated successfully");
                 setIsEditing(false);
             } else {
-                Alert.alert('Error', `Failed to update profile: ${data.message || 'Unknown error'}`);
+                setError(`Failed to update profile: ${data.message || "Unknown error"}`);
             }
-        } catch (error) {
-            console.error('Error updating student data:', error);
-            Alert.alert('Error', 'An unexpected error occurred while updating the profile.');
+        } catch (err) {
+            console.error("Error updating student data:", err);
+            setError("An unexpected error occurred while updating the profile.");
         }
     };
 
     const handleLogout = async () => {
         try {
-            await SecureStore.deleteItemAsync('authToken');
-            router.replace('/sign-in');
-        } catch (error) {
-            console.error('Error during logout:', error);
-            Alert.alert('Error', 'Failed to logout');
+            await SecureStore.deleteItemAsync("authToken");
+            router.replace("/sign-in");
+        } catch (err) {
+            console.error("Error during logout:", err);
+            Alert.alert("Error", "Failed to logout.");
         }
     };
 
     if (!studentData) {
         return (
             <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#E9C76E" />
                 <Text style={styles.loadingText}>Loading...</Text>
             </View>
         );
     }
 
     return (
-        <LinearGradient colors={['#2A4955', '#528399']} style={styles.gradient}>
+        <LinearGradient colors={["#2A4955", "#528399"]} style={styles.gradient}>
             <ScrollView contentContainerStyle={styles.scrollContainer}>
+                {error && <ErrorBanner message={error} onClose={() => setError(null)} />}
+
                 <View style={styles.profileContainer}>
                     <Image
-                        source={{ uri: studentData.image_url || '/placeholder.svg?height=120&width=120' }}
+                        source={{
+                            uri: studentData.image_url || "https://via.placeholder.com/120",
+                        }}
                         style={styles.profileImage}
                     />
-                    <Text style={styles.profileName}>
-                        {studentData.student_name || 'Not provided'}
-                    </Text>
-                    <Text style={styles.profileEmail}>
-                        {studentData.student_email || 'Not provided'}
-                    </Text>
+                    <Text style={styles.profileName}>{studentData.student_name || "Not provided"}</Text>
+                    <Text style={styles.profileEmail}>{studentData.student_email || "Not provided"}</Text>
 
                     {/* Rockie Coins and Gems */}
                     <View style={styles.rockieContainer}>
-                        <View style={styles.rockieItem}>
-                            <Image
-                                source={require('@/assets/images/adaptive-icon.png')} // Reemplazar con la ruta real del ícono
-                                style={styles.rockieIcon}
-                            />
-                            <Text style={styles.rockieText}>
-                                {studentData.rockie_coins?.toString() || '0'}
-                            </Text>
-                        </View>
-                        <View style={styles.rockieItem}>
-                            <Image
-                                source={require('@/assets/images/adaptive-icon.png')} // Reemplazar con la ruta real del ícono
-                                style={styles.rockieIcon}
-                            />
-                            <Text style={styles.rockieText}>
-                                {studentData.rockie_gems?.toString() || '0'}
-                            </Text>
-                        </View>
+                        <RockieStat icon="coins" value={studentData.rockie_coins || 0} label="Coins" />
+                        <RockieStat icon="diamond" value={studentData.rockie_gems || 0} label="Gems" />
                     </View>
                 </View>
 
                 <View style={styles.infoContainer}>
-                    <InfoBlock label="Student ID" value={studentData.student_id || 'Not provided'} />
+                    <InfoBlock label="Student ID" value={studentData.student_id || "Not provided"} />
                     <InfoBlock
                         label="Birthday"
-                        value={studentData.birthday || 'Not provided'}
+                        value={studentData.birthday || "Not provided"}
                         editable={isEditing}
                         onPress={() => setShowDatePicker(true)}
                     />
-                    <InfoBlock
-                        label="Gender"
-                        value={studentData.gender || 'Not provided'}
-                        editable={isEditing}
-                        onPress={() => {}}
-                    />
+                    <InfoBlock label="Gender" value={studentData.gender || "Not provided"} editable={isEditing} />
                     <InfoBlock
                         label="Telephone"
-                        value={studentData.telephone?.toString() || 'Not provided'}
+                        value={studentData.telephone?.toString() || "Not provided"}
                         editable={isEditing}
-                        onPress={() => {}}
                     />
-                    <InfoBlock
-                        label="Tenant ID"
-                        value={studentData.tenant_id || 'Not provided'}
-                    />
-                    <InfoBlock
-                        label="Account Created"
-                        value={studentData.creation_date || 'Not provided'}
-                    />
+                    <InfoBlock label="Tenant ID" value={studentData.tenant_id || "Not provided"} />
+                    <InfoBlock label="Account Created" value={studentData.creation_date || "Not provided"} />
 
                     {showDatePicker && (
                         <DateTimePicker
-                            value={
-                                studentData.birthday
-                                    ? new Date(studentData.birthday)
-                                    : new Date()
-                            }
+                            value={studentData.birthday ? new Date(studentData.birthday) : new Date()}
                             mode="date"
                             display="default"
                             onChange={(event, selectedDate) => {
@@ -195,36 +172,51 @@ export default function ProfileScreen() {
                                 if (selectedDate) {
                                     setStudentData({
                                         ...studentData,
-                                        birthday: selectedDate.toISOString().split('T')[0],
+                                        birthday: selectedDate.toISOString().split("T")[0],
                                     });
                                 }
                             }}
                         />
                     )}
 
-                    <TouchableOpacity
-                        onPress={() => {
-                            if (isEditing) {
-                                updateStudentData();
-                            } else {
-                                setIsEditing(true);
-                            }
-                        }}
-                        style={styles.editButton}
-                    >
-                        <Text style={styles.editButtonText}>
-                            {isEditing ? 'Save Changes' : 'Edit Profile'}
-                        </Text>
-                    </TouchableOpacity>
+                    <CustomButton
+                        title={isEditing ? "Save Changes" : "Edit Profile"}
+                        onPress={isEditing ? updateStudentData : () => setIsEditing(true)}
+                    />
 
-                    <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-                        <Text style={styles.logoutButtonText}>Logout</Text>
-                    </TouchableOpacity>
+                    <CustomButton title="Logout" onPress={handleLogout} variant="secondary" />
                 </View>
             </ScrollView>
         </LinearGradient>
     );
 }
+
+const RockieStat = ({ icon, value, label }: { icon: string; value: number; label: string }) => (
+    <View style={styles.rockieItem}>
+        <Ionicons name={icon} size={24} color="#E9C76E" />
+        <Text style={styles.rockieText}>
+            {value} {label}
+        </Text>
+    </View>
+);
+
+const ErrorBanner = ({ message, onClose }: { message: string; onClose: () => void }) => (
+    <View style={styles.errorBanner}>
+        <Text style={styles.errorText}>{message}</Text>
+        <TouchableOpacity onPress={onClose}>
+            <Ionicons name="close-circle" size={20} color="#FFF" />
+        </TouchableOpacity>
+    </View>
+);
+
+const CustomButton = ({ title, onPress, variant = "primary" }: { title: string; onPress: () => void; variant?: string }) => (
+    <TouchableOpacity
+        style={[styles.button, variant === "secondary" && styles.buttonSecondary]}
+        onPress={onPress}
+    >
+        <Text style={[styles.buttonText, variant === "secondary" && styles.buttonTextSecondary]}>{title}</Text>
+    </TouchableOpacity>
+);
 
 const InfoBlock = ({
                        label,
@@ -252,6 +244,7 @@ const InfoBlock = ({
     </View>
 );
 
+
 const styles = StyleSheet.create({
     gradient: {
         flex: 1,
@@ -263,16 +256,16 @@ const styles = StyleSheet.create({
     },
     loadingContainer: {
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#2A4955',
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "#2A4955",
     },
     loadingText: {
-        color: '#FFF',
+        color: "#FFF",
         fontSize: 18,
     },
     profileContainer: {
-        alignItems: 'center',
+        alignItems: "center",
         marginBottom: 30,
     },
     profileImage: {
@@ -280,83 +273,89 @@ const styles = StyleSheet.create({
         height: 120,
         borderRadius: 60,
         marginBottom: 16,
-        backgroundColor: '#E9C76E',
+        backgroundColor: "#E9C76E",
     },
     profileName: {
-        color: '#E9C76E',
+        color: "#E9C76E",
         fontSize: 24,
-        fontWeight: 'bold',
+        fontWeight: "bold",
         marginBottom: 4,
     },
     profileEmail: {
-        color: 'rgba(255, 255, 255, 0.8)',
+        color: "rgba(255, 255, 255, 0.8)",
         fontSize: 16,
     },
     rockieContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
+        flexDirection: "row",
+        justifyContent: "space-around",
         marginTop: 16,
         marginBottom: 16,
     },
     rockieItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginRight: 8,
-    },
-    rockieIcon: {
-        width: 24,
-        height: 24,
-        marginRight: 8,
+        alignItems: "center",
     },
     rockieText: {
-        color: 'white',
-        fontSize: 18,
-        fontWeight: 'bold',
+        color: "#FFF",
+        fontSize: 16,
+        fontWeight: "bold",
+        marginTop: 4,
     },
     infoContainer: {
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        backgroundColor: "rgba(255, 255, 255, 0.1)",
         borderRadius: 20,
         padding: 20,
+        marginBottom: 20,
     },
+    errorBanner: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        backgroundColor: "rgba(255, 0, 0, 0.7)",
+        padding: 10,
+        borderRadius: 8,
+        marginBottom: 20,
+    },
+    errorText: {
+        color: "#FFF",
+        fontSize: 14,
+        flex: 1,
+        marginRight: 10,
+    },
+    button: {
+        backgroundColor: "#2F9F91",
+        borderRadius: 10,
+        paddingVertical: 12,
+        alignItems: "center",
+        marginTop: 20,
+    },
+    buttonText: {
+        color: "#FFF",
+        fontSize: 16,
+        fontWeight: "bold",
+    },
+    buttonSecondary: {
+        backgroundColor: "#E9C76E",
+    },
+    buttonTextSecondary: {
+        color: "#2A4955",
+    },
+
     infoBlock: {
         marginBottom: 20,
     },
     label: {
-        color: 'rgba(255, 255, 255, 0.8)',
+        color: "rgba(255, 255, 255, 0.8)",
         fontSize: 14,
         marginBottom: 4,
     },
     value: {
-        color: '#FFF',
+        color: "#FFF",
         fontSize: 18,
     },
     editableValueContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
     },
-    editButton: {
-        backgroundColor: '#2F9F91',
-        borderRadius: 10,
-        paddingVertical: 12,
-        alignItems: 'center',
-        marginTop: 20,
-        marginBottom: 10,
-    },
-    editButtonText: {
-        color: '#FFF',
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    logoutButton: {
-        backgroundColor: '#E9C76E',
-        borderRadius: 10,
-        paddingVertical: 12,
-        alignItems: 'center',
-    },
-    logoutButtonText: {
-        color: '#2A4955',
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
+
 });

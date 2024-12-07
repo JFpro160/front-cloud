@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Button, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import * as SecureStore from "expo-secure-store";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import Spinner from "react-native-loading-spinner-overlay";
 
 interface RockieData {
     experience?: number;
@@ -27,6 +29,7 @@ export default function RockieScreen() {
 
     const fetchRockieData = async () => {
         setIsLoading(true);
+        setError(null);
 
         try {
             const token = await SecureStore.getItemAsync("authToken");
@@ -52,11 +55,8 @@ export default function RockieScreen() {
             console.log("GET API Response:", data);
 
             if (response.status === 200 && data.body && data.body.rockie_data) {
-                // Si el Rockie existe, lo mostramos
-                setRockieData(data.body);  // Actualiza el estado
-                setError(null); // Limpiar cualquier error
+                setRockieData(data.body); // Update Rockie data
             } else if (response.status === 404 || !data.body.rockie_data) {
-                // Si no se encuentra el Rockie, mostramos el mensaje
                 setRockieData(null);
                 setError("No Rockie found.");
             } else {
@@ -69,7 +69,6 @@ export default function RockieScreen() {
             setIsLoading(false);
         }
     };
-
 
     const createDefaultRockie = async () => {
         try {
@@ -88,7 +87,7 @@ export default function RockieScreen() {
                     "Authorization": token,
                 },
                 body: JSON.stringify({
-                    rockie_name: "FireRockie2", // Nombre por defecto
+                    rockie_name: "FireRockie2", // Default name
                 }),
             });
 
@@ -97,8 +96,7 @@ export default function RockieScreen() {
             if (response.status === 200) {
                 const data = await response.json();
                 console.log("POST API Response (Rockie Created):", data);
-                setRockieData(data.body); // Actualiza los datos del Rockie
-                setError(null); // Limpiar error
+                setRockieData(data.body); // Update Rockie data
             } else {
                 const errorText = await response.text();
                 console.error("Error creating Rockie:", errorText);
@@ -110,79 +108,76 @@ export default function RockieScreen() {
         }
     };
 
-    // If still loading, show the loading message
+    // Custom Button Component
+    const CustomButton = ({ title, onPress }: { title: string; onPress: () => void }) => (
+        <TouchableOpacity style={styles.button} onPress={onPress}>
+            <Text style={styles.buttonText}>{title}</Text>
+        </TouchableOpacity>
+    );
+
     if (isLoading) {
         return (
-            <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading Rockie data...</Text>
-            </View>
+            <Spinner
+                visible={isLoading}
+                textContent="Loading Rockie data..."
+                textStyle={styles.loadingText}
+            />
         );
     }
-
-    // Debugging: print the current `rockieData`
-    console.log("Current Rockie Data:", rockieData);
 
     return (
         <LinearGradient colors={["#2A4955", "#528399"]} style={styles.gradient}>
             <View style={styles.scrollContainer}>
-                <View style={styles.infoContainer}>
+                <LinearGradient colors={["#3A5E73", "#2A4955"]} style={styles.infoContainer}>
                     <Text style={styles.header}>Rockie Profile</Text>
 
                     {error && (
                         <View style={styles.errorContainer}>
                             <Text style={styles.errorText}>{error}</Text>
+                            <CustomButton title="Dismiss" onPress={() => setError(null)} />
                         </View>
                     )}
 
-                    {/* Render Rockie data if available */}
                     {rockieData && rockieData.rockie_data ? (
                         <>
-                            <Text style={styles.label}>Name:</Text>
+                            <Text style={styles.label}>
+                                <Icon name="account-circle" size={20} color="#E9C76E" /> Name:
+                            </Text>
                             <Text style={styles.value}>
                                 {rockieData.rockie_data.rockie_name || "Not provided"}
                             </Text>
 
-                            <Text style={styles.label}>Level:</Text>
+                            <Text style={styles.label}>
+                                <Icon name="star" size={20} color="#E9C76E" /> Level:
+                            </Text>
                             <Text style={styles.value}>
                                 {rockieData.level ?? "Not provided"}
                             </Text>
 
-                            <Text style={styles.label}>Experience:</Text>
+                            <Text style={styles.label}>
+                                <Icon name="chart-line" size={20} color="#E9C76E" /> Experience:
+                            </Text>
                             <Text style={styles.value}>
                                 {rockieData.experience ?? "Not provided"}
                             </Text>
 
-                            <Text style={styles.label}>Evolution:</Text>
+                            <Text style={styles.label}>
+                                <Icon name="leaf" size={20} color="#E9C76E" /> Evolution:
+                            </Text>
                             <Text style={styles.value}>
                                 {rockieData.rockie_data.evolution || "Not provided"}
-                            </Text>
-
-                            <Text style={styles.label}>Student ID:</Text>
-                            <Text style={styles.value}>
-                                {rockieData.student_id || "Not provided"}
-                            </Text>
-
-                            <Text style={styles.label}>Tenant ID:</Text>
-                            <Text style={styles.value}>
-                                {rockieData.tenant_id || "Not provided"}
-                            </Text>
-
-                            <Text style={styles.label}>Creation Date:</Text>
-                            <Text style={styles.value}>
-                                {rockieData.creation_date || "Not provided"}
                             </Text>
                         </>
                     ) : (
                         <View style={styles.noRockieContainer}>
                             <Text style={styles.noRockieText}>No Rockie found.</Text>
-                            <Button title="Create Rockie" onPress={createDefaultRockie} />
+                            <CustomButton title="Create Rockie" onPress={createDefaultRockie} />
                         </View>
                     )}
-                </View>
+                </LinearGradient>
             </View>
         </LinearGradient>
     );
-
 }
 
 const styles = StyleSheet.create({
@@ -193,21 +188,19 @@ const styles = StyleSheet.create({
         flexGrow: 1,
         padding: 20,
     },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: "#2A4955",
-    },
     loadingText: {
         color: "#FFF",
         fontSize: 18,
     },
     infoContainer: {
         backgroundColor: "rgba(255, 255, 255, 0.1)",
-        borderRadius: 20,
+        borderRadius: 15,
         padding: 20,
-        marginVertical: 10,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 5,
     },
     header: {
         fontSize: 24,
@@ -217,7 +210,7 @@ const styles = StyleSheet.create({
         textAlign: "center",
     },
     label: {
-        color: "rgba(255, 255, 255, 0.8)",
+        color: "#FFF",
         fontSize: 16,
         marginTop: 10,
     },
@@ -246,4 +239,18 @@ const styles = StyleSheet.create({
         color: "#FFF",
         fontSize: 16,
     },
+    button: {
+        backgroundColor: "#E9C76E",
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+        alignItems: "center",
+        marginTop: 10,
+    },
+    buttonText: {
+        color: "#2A4955",
+        fontSize: 16,
+        fontWeight: "bold",
+    },
 });
+
