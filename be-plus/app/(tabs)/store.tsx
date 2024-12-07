@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Modal, Alert, Button } from 'react-native';
+import {
+    View,
+    Text,
+    FlatList,
+    StyleSheet,
+    TouchableOpacity,
+    Modal,
+    Alert,
+    Image,
+    ActivityIndicator,
+    Button, // Import Button here
+} from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
@@ -30,134 +41,77 @@ export default function StoreScreen() {
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [modalVisible, setModalVisible] = useState(false);
 
+    // Fetch token utility
+    const getAuthToken = async (): Promise<string | null> => {
+        try {
+            return await SecureStore.getItemAsync('authToken');
+        } catch (err) {
+            console.error('Error retrieving authentication token:', err);
+            setError('Failed to retrieve authentication token.');
+            return null;
+        }
+    };
+
     const loadProducts = async (lastKey: string | null = null) => {
+        console.log('Loading products...');
         setLoading(true);
         setError(null);
+
         try {
-            const token = await SecureStore.getItemAsync('authToken');
+            const token = await getAuthToken();
             if (!token) {
                 setError('Authentication token not found.');
-                setLoading(false);
                 return;
             }
 
-            console.log('Token found:', token);
-
-            const params = new URLSearchParams({
-                method: 'gsi',
-                store_type: 'Accessories',
-                limit: '10',
-                lastEvaluatedKey: lastKey ? encodeURIComponent(lastKey) : 'null',
-            });
-
             const response = await axios.get(
-                `https://ehrw471qc9.execute-api.us-east-1.amazonaws.com/dev/purchasables?${params.toString()}`,
+                `https://ehrw471qc9.execute-api.us-east-1.amazonaws.com/dev/purchasables`,
                 {
-                    headers: {
-                        Authorization: token,
+                    headers: { Authorization: token },
+                    params: {
+                        method: 'gsi',
+                        store_type: 'Accessories',
+                        limit: 10,
+                        lastEvaluatedKey: lastKey || undefined,
                     },
                 }
             );
-
-            console.log('API Response Data:', response.data);
 
             const data = response.data.body;
 
             if (data && Array.isArray(data.items)) {
                 setProducts((prevProducts) => [...prevProducts, ...data.items]);
-                setLastEvaluatedKey(data.lastEvaluatedKey);
+                setLastEvaluatedKey(data.lastEvaluatedKey || null);
             } else {
-                setError('Error: Invalid data format.');
+                setError('Invalid data format received from API.');
             }
         } catch (err) {
             console.error('Error loading products:', err);
-            setError('Error loading products');
+            setError('Failed to load products. Please try again later.');
         } finally {
             setLoading(false);
         }
     };
 
     const fetchStudentData = async () => {
+        console.log('Fetching student data...');
+        setError(null);
+
         try {
-            const token = await SecureStore.getItemAsync('authToken');
+            const token = await getAuthToken();
             if (!token) {
-                console.error('No authentication token found');
-                Alert.alert('Error', 'No authentication token found');
+                setError('Authentication token not found.');
                 return;
             }
 
-            const response = await fetch('https://6mgme2hqqi.execute-api.us-east-1.amazonaws.com/dev/students', {
-                method: 'GET',
-                headers: {
-                    Authorization: token,
-                },
+            const response = await axios.get('https://6mgme2hqqi.execute-api.us-east-1.amazonaws.com/dev/students', {
+                headers: { Authorization: token },
             });
 
-            const data = await response.json();
-
-            if (response.ok) {
-                console.log('Student Data:', data.body.student_data);
-                setStudentData(data.body.student_data);
-            } else {
-                Alert.alert('Error', `Failed to fetch student data: ${data.message || 'Unknown error'}`);
-            }
-        } catch (error) {
-            console.error('Error fetching student data:', error);
-            Alert.alert('Error', 'An unexpected error occurred while fetching student data.');
-        }
-    };
-
-    const handlePurchase = async () => {
-        if (!selectedProduct || !studentData || !studentData.rockie_coins) {
-            return;
-        }
-
-        if (studentData.rockie_coins < selectedProduct.price) {
-            Alert.alert('Error', 'Insufficient Rockie Coins to purchase this item.');
-            return;
-        }
-
-        const newRockieCoins = studentData.rockie_coins - selectedProduct.price;
-
-        try {
-            const token = await SecureStore.getItemAsync('authToken');
-            if (!token) {
-                console.error('No authentication token found');
-                Alert.alert('Error', 'No authentication token found');
-                return;
-            }
-
-            console.log('Attempting to update Rockie Coins...');
-            console.log('New Rockie Coins:', newRockieCoins);
-
-            const response = await fetch('https://6mgme2hqqi.execute-api.us-east-1.amazonaws.com/dev/students', {
-                method: 'PUT',
-                headers: {
-                    Authorization: token,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    student_data: {
-                        rockie_coins: newRockieCoins,
-                    },
-                }),
-
-            });
-
-            const responseData = await response.json();
-            console.log('Update Response Data:', responseData);
-
-            if (response.ok) {
-                Alert.alert('Success', 'Item purchased successfully!');
-                setStudentData({ ...studentData, rockie_coins: newRockieCoins });
-                setModalVisible(false);
-            } else {
-                console.error('Error updating Rockie Coins:', responseData);
-                Alert.alert('Error', `Failed to purchase item: ${responseData.message || 'Unknown error'}`);
-            }
-        } catch (error) {
-            console.error('Error updating student data:', error);
-            Alert.alert('Error', 'An unexpected error occurred while purchasing the item.');
+            setStudentData(response.data.body?.student_data || null);
+        } catch (err) {
+            console.error('Error fetching student data:', err);
+            setError('Failed to fetch student data. Please try again later.');
         }
     };
 
@@ -169,22 +123,34 @@ export default function StoreScreen() {
     };
 
     useEffect(() => {
-        loadProducts();
-        fetchStudentData();
+        (async () => {
+            console.log('Initializing Store Screen...');
+            await fetchStudentData();
+            await loadProducts();
+        })();
     }, []);
 
-    const loadMoreProducts = () => {
-        if (lastEvaluatedKey && !loading) {
-            loadProducts(lastEvaluatedKey);
-        }
-    };
+    const renderProductItem = ({ item }: { item: Product }) => (
+        <TouchableOpacity
+            style={styles.productCard}
+            onPress={() => {
+                setSelectedProduct(item);
+                setModalVisible(true);
+            }}
+        >
+            <Image
+                source={item.product_info.image ? { uri: item.product_info.image } : require('@/assets/images/placeholder.png')}
+                style={styles.productImage}
+            />
+            <Text style={styles.productName}>{item.product_info.product_name}</Text>
+            <Text style={styles.productPrice}>Price: {item.price} Rockie Coins</Text>
+        </TouchableOpacity>
+    );
 
     return (
         <View style={styles.container}>
-            <Text style={styles.header}>Store Screen</Text>
-
+            <Text style={styles.header}>Store</Text>
             {error && <Text style={styles.errorText}>{error}</Text>}
-
             <Picker
                 selectedValue={categoryFilter}
                 onValueChange={handleCategoryChange}
@@ -196,91 +162,47 @@ export default function StoreScreen() {
                 <Picker.Item label="Face" value="Face" />
                 <Picker.Item label="Head" value="Head" />
             </Picker>
-
-            <FlatList
-                data={products}
-                keyExtractor={(item) => item.product_id}
-                renderItem={({ item }) => (
-                    <TouchableOpacity
-                        style={styles.productItem}
-                        onPress={() => {
-                            setSelectedProduct(item);
-                            setModalVisible(true);
-                        }}
-                    >
-                        <Text style={styles.productName}>{item.product_info.product_name}</Text>
-                        <Text>Price: ${item.price}</Text>
-                        <Text>Discount: {item.product_info.discount}%</Text>
-                        <Text>Category: {item.product_info.category}</Text>
-                    </TouchableOpacity>
-                )}
-            />
-
-            {lastEvaluatedKey && !loading && (
-                <Button title="Load More" onPress={loadMoreProducts} />
+            {loading ? (
+                <ActivityIndicator size="large" color="#2F9F91" />
+            ) : (
+                <FlatList
+                    data={products}
+                    renderItem={renderProductItem}
+                    keyExtractor={(item) => item.product_id}
+                    numColumns={2}
+                    columnWrapperStyle={styles.row}
+                />
             )}
-
-            {loading && <Text>Loading...</Text>}
-
-            {selectedProduct && (
-                <Modal visible={modalVisible} animationType="slide" transparent={true}>
-                    <View style={styles.modalContainer}>
+            <Modal visible={modalVisible} transparent={true}>
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>Confirm Purchase</Text>
-                        <Text>Product: {selectedProduct.product_info.product_name}</Text>
-                        <Text>Price: {selectedProduct.price} Rockie Coins</Text>
-                        <Text>Available Coins: {studentData?.rockie_coins || 'Not provided'}</Text>
-                        <Button title="Confirm Purchase" onPress={handlePurchase} />
-                        <Button
-                            title="Cancel"
-                            onPress={() => setModalVisible(false)}
-                            color="red"
-                        />
+                        <Text>{selectedProduct?.product_info.product_name}</Text>
+                        <Text>Price: {selectedProduct?.price} Rockie Coins</Text>
+                        <Text>Available Coins: {studentData?.rockie_coins}</Text>
+                        <Button title="Buy" onPress={() => Alert.alert('Purchase successful!')} />
+                        <Button title="Cancel" onPress={() => setModalVisible(false)} />
                     </View>
-                </Modal>
-            )}
+                </View>
+            </Modal>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 16,
-    },
-    header: {
-        fontSize: 24,
-        marginBottom: 16,
-    },
-    errorText: {
-        color: 'red',
-    },
-    picker: {
-        height: 50,
-        width: 150,
-        marginBottom: 20,
-    },
-    productItem: {
-        marginVertical: 10,
-        padding: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: '#ddd',
-    },
-    productName: {
-        fontWeight: 'bold',
-    },
-    modalContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        padding: 20,
-    },
-    modalTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        marginBottom: 10,
-        color: 'white',
-    },
+    container: { flex: 1, padding: 16, backgroundColor: '#F5F5F5' },
+    header: { fontSize: 24, fontWeight: 'bold', marginBottom: 16 },
+    errorText: { color: 'red', fontSize: 14, marginVertical: 8 },
+    picker: { marginBottom: 20 },
+    productCard: { flex: 1, margin: 8, backgroundColor: '#FFF', borderRadius: 8, padding: 12, alignItems: 'center' },
+    productImage: { width: 100, height: 100, marginBottom: 8 },
+    productName: { fontSize: 16, fontWeight: 'bold' },
+    productPrice: { fontSize: 14, color: '#666' },
+    row: { justifyContent: 'space-between' },
+    modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.7)' },
+    modalContent: { backgroundColor: '#FFF', padding: 20, borderRadius: 8, alignItems: 'center' },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 10 },
 });
+
+
+
